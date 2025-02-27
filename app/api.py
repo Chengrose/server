@@ -5,11 +5,8 @@ from .db import engine
 from .models import *
 from sqlmodel import Session, select
 from typing import Annotated
-import jwt
-
-SECRET_KEY = "cfc886b7a95571cf8422587604527ef724be5f3d4940574e303da568179214f1"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 120
+import jwt, json
+from .config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, BASE_DIR
 
 # 用户申请token时的校验信息
 class StudentInfo(BaseModel):
@@ -53,12 +50,14 @@ def get_access_token(student_info: StudentInfo, session: SessionDep):
 async def get_token(token: Annotated[str, Depends(get_access_token)]):
     return {"token":token, "detail":"token获取成功，可开始实验！"}
 
-# TODO 将文件上传到云端后存储到指定文件夹
+# TODO 解析jwt用户信息，获取学生信息，校验hash是否一致
 @router.post("/submit-result")
 async def accept_result(submission: Annotated[str, Form()], report_file: UploadFile):
     upload_file_name = report_file.filename
     print(upload_file_name)
-    with open(f"./test_file/{upload_file_name}", "wb") as f:
+    submission = json.loads(submission)
+    print(submission)
+    with open(f"{BASE_DIR}/test_file/{upload_file_name}", "wb") as f:
         content = await report_file.read()
         f.write(content)
         

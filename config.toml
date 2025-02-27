@@ -1,0 +1,13 @@
+[jwt]
+key = "cfc886b7a95571cf8422587604527ef724be5f3d4940574e303da568179214f1"
+algorithm = "HS256"
+expire_minutes = 120
+
+[db]
+dialect = "mysql"
+driver = "mysqldb"
+username = "root"
+password = "123456"
+host = "127.0.0.1"
+port = 3306
+database = "sqlmodel"

@@ -1,12 +1,8 @@
 from .models import *
 from sqlmodel import create_engine, Session
+from .config import DATABASE_URL
 
-
-mysql_name = "sqlmodel"
-
-mysql_url = f"mysql+mysqldb://root:123456@127.0.0.1:3306/{mysql_name}"
-
-engine = create_engine(mysql_url, echo=True)
+engine = create_engine(DATABASE_URL, echo=True)
 
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
