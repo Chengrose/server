@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Body, Depends, Form, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from datetime import timedelta
 from .db import engine
 from .models import *
@@ -16,6 +16,13 @@ class StudentInfo(BaseModel):
     ip_address: str
     mac_address: str
 
+class Submission(BaseModel):
+    
+    ip_address: str
+    mac_address: str
+    total_score: int
+    experiment_id: int
+    file_hash: str
 
 def get_session():
     with Session(engine) as session:
@@ -32,6 +39,17 @@ def create_access_token(data: dict):
     token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return token
 
+def deconde_token():
+    pass
+
+def parse_and_validate_submission(submission: Annotated[str, Form()]):
+    try:
+        submission = Submission(**json.loads(submission))
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail="提交的数据格式错误，请检查后重新提交！")
+    
+    return submission
+    
 def get_access_token(student_info: StudentInfo, session: SessionDep):
     
     try:
@@ -52,10 +70,10 @@ async def get_token(token: Annotated[str, Depends(get_access_token)]):
 
 # TODO 解析jwt用户信息，获取学生信息，校验hash是否一致
 @router.post("/submit-result")
-async def accept_result(submission: Annotated[str, Form()], report_file: UploadFile):
+async def accept_result(submission: Annotated[Submission, Depends(parse_and_validate_submission)], report_file: UploadFile):
     upload_file_name = report_file.filename
     print(upload_file_name)
-    submission = json.loads(submission)
+    submission = submission.model_dump()
     print(submission)
     with open(f"{BASE_DIR}/test_file/{upload_file_name}", "wb") as f:
         content = await report_file.read()
