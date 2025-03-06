@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body, Depends, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel, ValidationError
 from datetime import timedelta
 from .db import engine
@@ -32,6 +32,7 @@ SessionDep = Annotated[Session, Depends(get_session)]
 
 router = APIRouter()
 
+# 根据学生id创建jwt
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.now() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -39,9 +40,18 @@ def create_access_token(data: dict):
     token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return token
 
-def deconde_token():
-    pass
+# 解析 jwt 获取学生id
+def deconde_token(token: str):
+    print("---------------------------start decode token------------------")
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.ExpiredSignatureError as e:
+        raise e
+    except jwt.InvalidTokenError as e:
+        raise e
+    return payload["student_id"]
 
+# 从提交请求中获得格式为mutipart/form-data中的请求体中的提交信息，将其转换为Submission对象进行检验
 def parse_and_validate_submission(submission: Annotated[str, Form()]):
     try:
         submission = Submission(**json.loads(submission))
@@ -49,7 +59,16 @@ def parse_and_validate_submission(submission: Annotated[str, Form()]):
         raise HTTPException(status_code=400, detail="提交的数据格式错误，请检查后重新提交！")
     
     return submission
-    
+
+# 从jwt中获取学生id，查找数据库获取对应学生信息
+def get_user_from_token(x_token: Annotated[str, Header()]):
+    print("---------------------------get token from headers------------------")
+    student_id = deconde_token(x_token)
+    if not student_id:
+        raise HTTPException(status_code=401, detail="无效的token！")
+    return student_id
+
+# 由请求体中学生信息生成jwt
 def get_access_token(student_info: StudentInfo, session: SessionDep):
     
     try:
@@ -59,18 +78,18 @@ def get_access_token(student_info: StudentInfo, session: SessionDep):
     
     # 没有登录记录或者上一次登录记录与当前时间相差两小时以上
     if (not student.login_logs) or (datetime.now() - student.login_logs[0].login_time) >= timedelta(hours=2):
-        return create_access_token({"student_number": student.student_number})
+        return create_access_token({"student_id": student.student_id})
     else: 
         raise HTTPException(status_code=403, detail="两小时内已经获得过token，不可再获取！")
         
-    
+# 学生获取 jwt 接口
 @router.post("/get-token")
 async def get_token(token: Annotated[str, Depends(get_access_token)]):
     return {"token":token, "detail":"token获取成功，可开始实验！"}
 
-# TODO 解析jwt用户信息，获取学生信息，校验hash是否一致
+# TODO 解析 jwt 用户信息，获取学生信息，校验hash是否一致
 @router.post("/submit-result")
-async def accept_result(submission: Annotated[Submission, Depends(parse_and_validate_submission)], report_file: UploadFile):
+async def accept_result(student_id: Annotated[int, Depends(get_user_from_token)], submission: Annotated[Submission, Depends(parse_and_validate_submission)], report_file: UploadFile):
     upload_file_name = report_file.filename
     print(upload_file_name)
     submission = submission.model_dump()
